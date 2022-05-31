@@ -46,6 +46,8 @@ int main()
     double map_size = 6.0;
     double _min_height = 0.0;
     double _max_height = 5.0;
+    double step_size = 5.0;
+    double protected_zone = 0.5;
 
     bool exit = false;
     int iter = 0;
@@ -70,7 +72,7 @@ int main()
 
         vector<Eigen::Vector3d> path = rrt_server.find_rrt_path(
             vector<Eigen::Vector3d>(), obs_pcl, start, end, 
-            no_fly_zone, _min_height, _max_height);
+            no_fly_zone, _min_height, _max_height, step_size, protected_zone);
 
         std::cout << "[test_server_module]" << 
             " total runs(" << KBLU << iter << KNRM << ") and timer(" << KBLU <<

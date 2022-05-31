@@ -30,7 +30,8 @@ namespace rrt_server
         pcl::PointCloud<pcl::PointXYZ>::Ptr obs_pcl, 
         Eigen::Vector3d start, Eigen::Vector3d end, 
         vector<Eigen::Vector4d> no_fly_zone,
-        double min_height, double max_height)
+        double min_height, double max_height,
+        double step_size, double protected_zone)
     {
         vector<Eigen::Vector3d> path;
 
@@ -118,7 +119,7 @@ namespace rrt_server
         rsn.initialize_boundaries(min_height, max_height, no_fly_zone);
         rsn.initialize_map_characteristics(transformed_cropped, 
             map_size, Eigen::Vector3d(0,0,_origin.z()));
-        rsn.initialize_node_characteristics(0.025, 5.0, 0.5, 
+        rsn.initialize_node_characteristics(0.025, step_size, protected_zone, 
             rotation, translation);
 
         int iter = 0;

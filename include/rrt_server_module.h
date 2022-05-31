@@ -73,7 +73,7 @@ namespace rrt_server
                 vector<Eigen::Vector3d> previous_input,
                 pcl::PointCloud<pcl::PointXYZ>::Ptr obs_pcl, Eigen::Vector3d start, 
                 Eigen::Vector3d end, vector<Eigen::Vector4d> no_fly_zone,
-                double min_height, double max_height);
+                double min_height, double max_height, double step_size, double protected_zone);
 
     };
 }

@@ -137,7 +137,7 @@ namespace rrt_server
                 return linspaced;
             }
 
-            inline bool kdtree_collide_pcl(
+            inline bool kdtree_collide_pcl_bool(
                 Eigen::Vector3d point, pcl::PointCloud<pcl::PointXYZ>::Ptr obs, double c)
             {
                 pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
@@ -167,6 +167,33 @@ namespace rrt_server
                 return false;
             }
 
+            inline int kdtree_collide_pcl_points_size(
+                Eigen::Vector3d point, pcl::PointCloud<pcl::PointXYZ>::Ptr obs, double c)
+            {
+                pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+
+                kdtree.setInputCloud(obs);
+
+                pcl::PointXYZ searchPoint;
+                searchPoint.x = point.x();
+                searchPoint.y = point.y();
+                searchPoint.z = point.z();
+
+                std::vector<int> pointIdxRadiusSearch;
+                std::vector<float> pointRadiusSquaredDistance;
+
+                // float radius = 256.0f * rand () / (RAND_MAX + 1.0f);
+
+                float radius = (float)c;
+
+                if ( kdtree.radiusSearch (searchPoint, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0 )
+                {
+                    return (int)pointIdxRadiusSearch.size();
+                }
+
+                return 0;
+            }
+
             inline Eigen::Vector3d rotate_translation_with_rpy(
                 Eigen::Vector3d rotation, Eigen::Vector3d translation)
             {
@@ -189,6 +216,74 @@ namespace rrt_server
                 Eigen::Quaterniond rotatedP = rot * p * rot.inverse(); 
                 
                 return rotatedP.vec();
+            }
+
+            /** @brief Check if the step node that has been generated is valid or not
+             * It will be invalid if the step node either lies in the proximity of a pointcloud (that is, an obstacle) 
+             * or if the straight line path joining nearest_node and step_node goes through an obstacle
+            */
+            inline bool check_line_validity_with_pcl(
+                Eigen::Vector3d p, Eigen::Vector3d q, double obs_threshold,
+                pcl::PointCloud<pcl::PointXYZ>::Ptr obs)
+            {
+                double distance = (p - q).norm();
+                int n = ceil(distance / obs_threshold);
+
+                Eigen::Vector3d large, small;
+
+                vector<Eigen::Vector3d> line_vector;
+
+                Eigen::Vector3d valid_origin = (p + q) / 2;
+
+                Eigen::Vector3d abs_pq_vector = p - q;
+                abs_pq_vector.x() = abs(abs_pq_vector.x());
+                abs_pq_vector.y() = abs(abs_pq_vector.y());
+                abs_pq_vector.z() = abs(abs_pq_vector.z());
+
+                // Establish a kind of AABB box around the line
+                Eigen::Vector3d local_map_size = abs_pq_vector + 
+                    Eigen::Vector3d(2 * obs_threshold, 2 * obs_threshold, 2 * obs_threshold);
+
+                pcl::PointCloud<pcl::PointXYZ>::Ptr local_obs;
+                local_obs = pcl_ptr_box_crop(obs, valid_origin, local_map_size);
+
+                size_t local_num_points = local_obs->size();
+                int local_points_total = static_cast<int>(local_num_points);
+
+                if (local_points_total == 0)
+                    return true;
+
+                vector<double> line_vector_x = linspace(p.x(), q.x(), (double)n);
+                vector<double> line_vector_y = linspace(p.y(), q.y(), (double)n);
+                vector<double> line_vector_z = linspace(p.z(), q.z(), (double)n);
+                for (int i = 0; i < (int)line_vector_x.size(); i++)
+                {
+                    line_vector.push_back(Eigen::Vector3d(line_vector_x[i], line_vector_y[i], line_vector_z[i]));
+                }
+
+                Eigen::Vector3d clearance_crop = Eigen::Vector3d(2 * obs_threshold, 2 * obs_threshold, 2 * obs_threshold);
+
+                for(int i = 0; i < (int)line_vector.size(); i++)
+                {
+                    Eigen::Vector3d point_in_line_vector = line_vector[i];
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr sub_local_obs;
+
+                    // Check to see whether the point in the line 
+                    // collides with the pointcloud
+
+                    sub_local_obs = pcl_ptr_box_crop(local_obs, point_in_line_vector, clearance_crop);
+
+                    size_t num_points = sub_local_obs->size();
+                    int total = static_cast<int>(num_points);
+                    
+                    if (total == 0)
+                        continue;
+
+                    if (kdtree_collide_pcl_bool(point_in_line_vector, sub_local_obs, obs_threshold))
+                        return false;
+
+                }
+                return true;
             }
 
     };
@@ -268,7 +363,8 @@ namespace rrt_server
                 }                    
             }
 
-            bool flag = check_validity(nodes[index]->position, step_node->position);
+            bool flag = ru.check_line_validity_with_pcl(
+                nodes[index]->position, step_node->position, obs_threshold, obs);
 
             if(!flag) return;
 
@@ -277,7 +373,8 @@ namespace rrt_server
             nodes.push_back(step_node);
             nodes[index]->children.push_back(step_node);
             
-            if((check_validity(step_node->position, end_node.position)) && 
+            if((ru.check_line_validity_with_pcl(
+                step_node->position, end_node.position, obs_threshold, obs)) && 
                 (sq_separation(step_node->position, end_node.position) < step_size))
             {
                 reached = true;
@@ -327,71 +424,6 @@ namespace rrt_server
             step.z() = min(max(step.z(), _min_height),_max_height);
 
             return step;
-        }
-
-        // They check if the step node that has been generated is valid or not
-        // It will be invalid if the step node either lies in the proximity of a pointcloud (that is, an obstacle) 
-        // or if the straight line path joining nearest_node and step_node goes through an obstacle
-        bool check_validity(Eigen::Vector3d p, Eigen::Vector3d q)
-        {
-            double distance = (p - q).norm();
-            int n = ceil(distance / obs_threshold);
-
-            Eigen::Vector3d large, small;
-
-            vector<Eigen::Vector3d> line_vector;
-
-            Eigen::Vector3d valid_origin = (p + q) / 2;
-
-            Eigen::Vector3d abs_pq_vector = p - q;
-            abs_pq_vector.x() = abs(abs_pq_vector.x());
-            abs_pq_vector.y() = abs(abs_pq_vector.y());
-            abs_pq_vector.z() = abs(abs_pq_vector.z());
-
-            // Establish a kind of AABB box around the line
-            Eigen::Vector3d local_map_size = abs_pq_vector + 
-                Eigen::Vector3d(2 * obs_threshold, 2 * obs_threshold, 2 * obs_threshold);
-
-            pcl::PointCloud<pcl::PointXYZ>::Ptr local_obs;
-            local_obs = ru.pcl_ptr_box_crop(obs, valid_origin, local_map_size);
-
-            size_t local_num_points = local_obs->size();
-            int local_points_total = static_cast<int>(local_num_points);
-
-            if (local_points_total == 0)
-                return true;
-
-            vector<double> line_vector_x = ru.linspace(p.x(), q.x(), (double)n);
-            vector<double> line_vector_y = ru.linspace(p.y(), q.y(), (double)n);
-            vector<double> line_vector_z = ru.linspace(p.z(), q.z(), (double)n);
-            for (int i = 0; i < (int)line_vector_x.size(); i++)
-            {
-                line_vector.push_back(Eigen::Vector3d(line_vector_x[i], line_vector_y[i], line_vector_z[i]));
-            }
-
-            Eigen::Vector3d clearance_crop = Eigen::Vector3d(2 * obs_threshold, 2 * obs_threshold, 2 * obs_threshold);
-
-            for(int i = 0; i < (int)line_vector.size(); i++)
-            {
-                Eigen::Vector3d point_in_line_vector = line_vector[i];
-                pcl::PointCloud<pcl::PointXYZ>::Ptr sub_local_obs;
-
-                // Check to see whether the point in the line 
-                // collides with the pointcloud
-
-                sub_local_obs = ru.pcl_ptr_box_crop(local_obs, point_in_line_vector, clearance_crop);
-
-                size_t num_points = sub_local_obs->size();
-                int total = static_cast<int>(num_points);
-                
-                if (total == 0)
-                    continue;
-
-                if (ru.kdtree_collide_pcl(point_in_line_vector, sub_local_obs, obs_threshold))
-                    return false;
-
-            }
-            return true;
         }
 
         std::vector<Vector3d> path_extraction()
