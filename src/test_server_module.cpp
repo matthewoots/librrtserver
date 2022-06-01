@@ -70,9 +70,10 @@ int main()
         pcl::PointCloud<pcl::PointXYZ>::Ptr obs_pcl (new pcl::PointCloud<pcl::PointXYZ>());
         vector<Eigen::Vector4d> no_fly_zone;
 
+        rrt_server.reset_parameters(no_fly_zone, _min_height, _max_height,
+            protected_zone, 0.03, 0.1);
         vector<Eigen::Vector3d> path = rrt_server.find_rrt_path(
-            vector<Eigen::Vector3d>(), obs_pcl, start, end, 
-            no_fly_zone, _min_height, _max_height, step_size, protected_zone);
+            vector<Eigen::Vector3d>(), obs_pcl, start, end, step_size);
 
         std::cout << "[test_server_module]" << 
             " total runs(" << KBLU << iter << KNRM << ") and timer(" << KBLU <<

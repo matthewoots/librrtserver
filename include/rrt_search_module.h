@@ -77,21 +77,24 @@ namespace rrt_server
             {
                 double roll = deg_to_rad(rpy.x()), pitch = deg_to_rad(rpy.y()), yaw = deg_to_rad(rpy.z());    
                 Eigen::Quaterniond q;
-                q = AngleAxisd(roll, Eigen::Vector3d::UnitX())
-                    * AngleAxisd(pitch, Eigen::Vector3d::UnitY())
-                    * AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
 
                 Eigen::Quaterniond point;
                 point.w() = 0;
                 // To identify which one comes first the rotation or the translation
                 if (forward_or_back.compare("backward")==0)
                 {
+                    q = AngleAxisd(roll, Eigen::Vector3d::UnitX())
+                        * AngleAxisd(pitch, Eigen::Vector3d::UnitY())
+                        * AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
                     point.vec() = Vector3d(p.x(), p.y(), p.z());
                     Eigen::Quaterniond rotatedP = q * point * q.inverse();
                     return rotatedP.vec() + translation;
                 }
                 else if (forward_or_back.compare("forward")==0)
                 {
+                    q = AngleAxisd(roll, Eigen::Vector3d::UnitX())
+                        * AngleAxisd(-pitch, Eigen::Vector3d::UnitY())
+                        * AngleAxisd(-yaw, Eigen::Vector3d::UnitZ());
                     point.vec() = Vector3d(p.x(), p.y(), p.z()) - translation;
                     Eigen::Quaterniond rotatedP = q * point * q.inverse();
                     return rotatedP.vec();
@@ -223,27 +226,30 @@ namespace rrt_server
              * or if the straight line path joining nearest_node and step_node goes through an obstacle
             */
             inline bool check_line_validity_with_pcl(
-                Eigen::Vector3d p, Eigen::Vector3d q, double obs_threshold,
+                Eigen::Vector3d p_end, Eigen::Vector3d q_start, double obs_threshold,
                 pcl::PointCloud<pcl::PointXYZ>::Ptr obs)
             {
-                double distance = (p - q).norm();
+
+                time_point<std::chrono::system_clock> timer_start = system_clock::now();
+
+                double distance = (p_end - q_start).norm();
                 int n = ceil(distance / obs_threshold);
 
                 Eigen::Vector3d large, small;
 
                 vector<Eigen::Vector3d> line_vector;
 
-                Eigen::Vector3d valid_origin = (p + q) / 2;
+                Eigen::Vector3d pq_vector = p_end - q_start;
+                Eigen::Vector3d rot_vec = pq_vector / pq_vector.norm();
+                Eigen::Vector3d valid_origin = (p_end + q_start) / 2;
 
-                Eigen::Vector3d abs_pq_vector = p - q;
-                abs_pq_vector.x() = abs(abs_pq_vector.x());
-                abs_pq_vector.y() = abs(abs_pq_vector.y());
-                abs_pq_vector.z() = abs(abs_pq_vector.z());
+                Eigen::Vector3d rotation_vector = deg_euler_rotation_pitch_yaw(rot_vec);
 
-                // Establish a kind of AABB box around the line
-                Eigen::Vector3d local_map_size = abs_pq_vector + 
-                    Eigen::Vector3d(2 * obs_threshold, 2 * obs_threshold, 2 * obs_threshold);
-
+                /** @brief Get a local cloud and check whether there is any points */
+                Eigen::Vector3d local_map_size;
+                local_map_size.x() = abs(p_end.x() - q_start.x()) + 3*obs_threshold;
+                local_map_size.y() = abs(p_end.y() - q_start.y()) + 3*obs_threshold;
+                local_map_size.z() = abs(p_end.z() - q_start.z()) + 3*obs_threshold;
                 pcl::PointCloud<pcl::PointXYZ>::Ptr local_obs;
                 local_obs = pcl_ptr_box_crop(obs, valid_origin, local_map_size);
 
@@ -253,37 +259,105 @@ namespace rrt_server
                 if (local_points_total == 0)
                     return true;
 
-                vector<double> line_vector_x = linspace(p.x(), q.x(), (double)n);
-                vector<double> line_vector_y = linspace(p.y(), q.y(), (double)n);
-                vector<double> line_vector_z = linspace(p.z(), q.z(), (double)n);
-                for (int i = 0; i < (int)line_vector_x.size(); i++)
+                Eigen::Affine3d cloud_transform = 
+                    get_point_cloud_transform(rotation_vector, valid_origin, "forward");
+                
+                pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZ>());
+                pcl::transformPointCloud (*local_obs, *transformed_cloud, cloud_transform);
+
+                // We will align in the X and Z axis
+                Eigen::Vector3d transformed_start = transform_vector(
+                    q_start, rotation_vector, valid_origin, "forward");
+
+                Eigen::Vector3d transformed_end = transform_vector(
+                    p_end, rotation_vector, valid_origin, "forward");
+
+                /** @brief Print the transformed start and end points */
+                // std::cout << "    check_line_validity_with_pcl \n    [" << transformed_start.transpose() <<
+                //     "] [" << transformed_end.transpose() << "]" << std::endl;
+
+                Eigen::Vector3d map_size = Eigen::Vector3d(
+                    abs(transformed_start.x() - transformed_end.x()) + 2*obs_threshold,
+                    abs(transformed_start.y() - transformed_end.y()) + 2*obs_threshold,
+                    abs(transformed_start.z() - transformed_end.z()) + 2*obs_threshold);
+
+                pcl::PointCloud<pcl::PointXYZ>::Ptr sub_local_obs;
+                sub_local_obs = pcl_ptr_box_crop(transformed_cloud, Eigen::Vector3d(0,0,0), map_size);
+
+                size_t num_points = sub_local_obs->size();
+                int total = static_cast<int>(num_points);
+                
+                // std::cout << "[rrt_search_module] check_line_validity_with_pcl time " << 
+                //     KGRN << duration<double>(system_clock::now() - 
+                //     timer_start).count() << KNRM << "s" << std::endl;
+
+                if (total == 0)
+                    return true;
+                else
+                    return false;
+
+            }
+
+            inline Eigen::Affine3d get_point_cloud_transform(
+                Eigen::Vector3d rotation_deg, Eigen::Vector3d translation,
+                std::string forward_or_back)
+            {
+                Eigen::Vector3d rotatedV;
+                Eigen::Quaterniond q;
+                
+                // To identify which one comes first the rotation or the translation
+                if (forward_or_back.compare("forward")==0)
                 {
-                    line_vector.push_back(Eigen::Vector3d(line_vector_x[i], line_vector_y[i], line_vector_z[i]));
+                    q = AngleAxisd(- rotation_deg.x() / 180.0 * 3.1415, Vector3d::UnitX())
+                        * AngleAxisd(- rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
+                        * AngleAxisd(- rotation_deg.z() / 180.0 * 3.1415, Vector3d::UnitZ());
+
+                    Eigen::Quaterniond p;
+                    p.w() = 0;
+                    p.vec() = - translation;
+                    Eigen::Quaterniond rotatedP = q * p * q.inverse(); 
+                    rotatedV = rotatedP.vec();
+                }
+                else if (forward_or_back.compare("backward")==0)
+                {
+                    q = AngleAxisd(rotation_deg.x() / 180.0 * 3.1415, Vector3d::UnitX())
+                        * AngleAxisd(rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
+                        * AngleAxisd(rotation_deg.z() / 180.0 * 3.1415, Vector3d::UnitZ());
+
+                    Eigen::Quaterniond p;
+                    p.w() = 0;
+                    p.vec() = Eigen::Vector3d::Zero();
+                    Eigen::Quaterniond rotatedP = q * p * q.inverse(); 
+                    rotatedV = rotatedP.vec() + translation;
                 }
 
-                Eigen::Vector3d clearance_crop = Eigen::Vector3d(2 * obs_threshold, 2 * obs_threshold, 2 * obs_threshold);
+                Eigen::Affine3d cloud_transform = Eigen::Affine3d::Identity();
+                // aff_t.translation() = - translation;
+                cloud_transform.translation() = rotatedV;
+                cloud_transform.linear() = q.toRotationMatrix();
+            
+                return cloud_transform;
+            }
 
-                for(int i = 0; i < (int)line_vector.size(); i++)
-                {
-                    Eigen::Vector3d point_in_line_vector = line_vector[i];
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr sub_local_obs;
+            inline Eigen::Vector3d deg_euler_rotation_pitch_yaw(Eigen::Vector3d rot_vector)
+            {
+                double xy = sqrt(pow(rot_vector.x(),2) + pow(rot_vector.y(),2));
+                double pitch = atan2(rot_vector.z(), xy);
+                double yaw = atan2(rot_vector.y(), rot_vector.x());    
+                Eigen::Quaterniond q2 = AngleAxisd(0.0, Vector3d::UnitX())
+                    * AngleAxisd(pitch, Vector3d::UnitY())
+                    * AngleAxisd(0.0, Vector3d::UnitZ());
 
-                    // Check to see whether the point in the line 
-                    // collides with the pointcloud
+                Eigen::Quaterniond q1 = AngleAxisd(0.0, Vector3d::UnitX())
+                    * AngleAxisd(0.0, Vector3d::UnitY())
+                    * AngleAxisd(yaw, Vector3d::UnitZ());
+                
+                Eigen::Quaterniond fq = q2*q1;
+                fq.normalize();
+                Eigen::Vector3d rotation_vector = fq.toRotationMatrix().eulerAngles(0, 1, 2);
+                rotation_vector = rotation_vector / 3.1415926535 * 180;
 
-                    sub_local_obs = pcl_ptr_box_crop(local_obs, point_in_line_vector, clearance_crop);
-
-                    size_t num_points = sub_local_obs->size();
-                    int total = static_cast<int>(num_points);
-                    
-                    if (total == 0)
-                        continue;
-
-                    if (kdtree_collide_pcl_bool(point_in_line_vector, sub_local_obs, obs_threshold))
-                        return false;
-
-                }
-                return true;
+                return rotation_vector;
             }
 
     };
@@ -329,18 +403,25 @@ namespace rrt_server
         {
             std::mt19937 generator(dev());
             std::uniform_real_distribution<double> dis_middle(-1.0, 1.0);
-            std::uniform_real_distribution<double> dis_normal(0.0, 1.0);
+            std::uniform_real_distribution<double> dis_normal(_min_height, _max_height);
             
             Node* step_node = new Node;
 
             /** @brief Generate the random vector values */
             // No need no fly zone for random node since step node will handle it
-            Eigen::Vector3d random_vector = 
-                Eigen::Vector3d(dis_middle(generator), dis_middle(generator), dis_middle(generator));        
+            // Eigen::Vector3d random_vector = 
+            //     Eigen::Vector3d(dis_middle(generator), dis_middle(generator), dis_middle(generator));        
 
-            int index = random_idx_selector(nodes.size());
-            
-            step_node->position = node_stepping(nodes[index]->position, random_vector);
+            // int index = random_idx_selector(nodes.size());
+            // step_node->position = node_stepping(nodes[index]->position, random_vector);
+
+            Eigen::Vector3d random_vector = 
+                Eigen::Vector3d(dis_middle(generator) * (map_size.x()/2), 
+                dis_middle(generator) * (map_size.y()/2), 
+                dis_normal(generator) - translation.z());
+            step_node->position = random_vector;
+
+            int index = near_node(*step_node);
 
             Eigen::Vector3d transformed_position = Vector3d(step_node->position.x(),
                 step_node->position.y(), step_node->position.z());
@@ -348,6 +429,10 @@ namespace rrt_server
             // To transform the point back to original frame
             Eigen::Vector3d original_position = ru.transform_vector(
                 transformed_position, rotation, translation, "backward");
+            
+            /** @brief Print the random point */
+            // std::cout << "[rrt_search_module] " << 
+            //     KBLU << random_vector.transpose() << KNRM << std::endl;
             
             for (int i = 0; i < (int)no_fly_zone.size(); i++)
             {
@@ -364,9 +449,14 @@ namespace rrt_server
             }
 
             bool flag = ru.check_line_validity_with_pcl(
-                nodes[index]->position, step_node->position, obs_threshold, obs);
+                step_node->position, nodes[index]->position, obs_threshold, obs);
 
-            if(!flag) return;
+            if(!flag)
+            {
+                // std::cout << "[rrt_search_module] " << 
+                //     KRED << "Rejected" << KNRM << std::endl; 
+                return;
+            }
 
             // Add the new node into the list and push_back data on children and parent
             step_node->parent = nodes[index];
@@ -374,7 +464,7 @@ namespace rrt_server
             nodes[index]->children.push_back(step_node);
             
             if((ru.check_line_validity_with_pcl(
-                step_node->position, end_node.position, obs_threshold, obs)) && 
+                end_node.position, step_node->position, obs_threshold, obs)) && 
                 (sq_separation(step_node->position, end_node.position) < step_size))
             {
                 reached = true;
@@ -385,6 +475,30 @@ namespace rrt_server
             }
 
             iter++;
+        }
+
+        // [near_node] is responsible for finding the nearest node in the tree 
+        // for a particular random node. 
+        int near_node(Node random)
+        {
+            double sq_min_dist = dmax;
+            // We give dist a default value if total node is 1 it will fall back on this
+            double sq_dist = sq_separation(start_node.position, random.position);
+            
+            int linking_node = 0;
+
+            for(int i = 0; i < (int)nodes.size(); i++)
+            {
+                // Other nodes than start node
+                sq_dist = sq_separation(nodes[i]->position, random.position);
+                // Evaluate distance
+                if(sq_dist < sq_min_dist)
+                {
+                    sq_min_dist = sq_dist;
+                    linking_node = i;
+                }
+            }
+            return linking_node;
         }
 
         int random_idx_selector(int nodes_size)
@@ -442,7 +556,42 @@ namespace rrt_server
                 down = *(down.parent);
             }
 
-            return path;
+            std::vector<Vector3d> reordered_path = get_reorder_path(path);
+
+            std::vector<Vector3d> shortened_path = get_shorten_path(reordered_path);
+
+            return shortened_path;
+        }
+
+        std::vector<Vector3d> get_reorder_path(
+            std::vector<Vector3d> path)
+        {
+            std::vector<Vector3d> reordered_path;
+            reordered_path.push_back(start_node.position);
+            for (int i = (int)path.size()-1; i >= 0; i--)
+                reordered_path.push_back(path[i]);            
+
+            return reordered_path;
+        }
+
+        std::vector<Vector3d> get_shorten_path(
+            std::vector<Vector3d> path)
+        {
+            std::vector<Vector3d> shortened_path;
+            shortened_path.push_back(path[0]);
+            for (int i = 1; i < path.size(); i++)
+            {
+                if (!ru.check_line_validity_with_pcl(
+                    path[i], shortened_path[(int)shortened_path.size()-1], 
+                    obs_threshold, obs))
+                {
+                    i--;          
+                    shortened_path.push_back(path[i]);
+                }
+            }   
+            shortened_path.push_back(path[path.size()-1]);      
+
+            return shortened_path;
         }
 
         public:

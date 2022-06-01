@@ -62,18 +62,41 @@ namespace rrt_server
         private:
             rrt_server::rrt_utility ru; 
 
+            double _min_height, _max_height;
+            double _protected_zone, _sub_runtime_error, _runtime_error;
+            vector<Eigen::Vector4d> _no_fly_zone;
+
         public:
             pcl::PointCloud<pcl::PointXYZ>::Ptr debug_save_local_obs;
 
-            rrt_server_node(){}
+            rrt_server_node()
+            {
+                debug_save_local_obs = pcl::PointCloud<pcl::PointXYZ>::Ptr(
+                    new pcl::PointCloud<pcl::PointXYZ>());
+            }
 
             ~rrt_server_node(){}
 
             vector<Eigen::Vector3d> find_rrt_path(
-                vector<Eigen::Vector3d> previous_input,
-                pcl::PointCloud<pcl::PointXYZ>::Ptr obs_pcl, Eigen::Vector3d start, 
-                Eigen::Vector3d end, vector<Eigen::Vector4d> no_fly_zone,
-                double min_height, double max_height, double step_size, double protected_zone);
+                vector<Eigen::Vector3d> previous_input, pcl::PointCloud<pcl::PointXYZ>::Ptr obs_pcl,
+                Eigen::Vector3d start, Eigen::Vector3d end, double step_size);
+            
+            pcl::PointCloud<pcl::PointXYZ>::Ptr get_debug_local_pcl()
+            {return debug_save_local_obs;}
+
+            void reset_parameters(vector<Eigen::Vector4d> no_fly_zone,
+                double min_height, double max_height, double protected_zone,
+                double sub_runtime_error, double runtime_error)
+            {
+                no_fly_zone.clear();
+                _no_fly_zone = no_fly_zone;
+                _min_height = min_height;
+                _max_height = max_height;
+                _protected_zone = protected_zone;
+
+                _sub_runtime_error = sub_runtime_error;
+                _runtime_error = runtime_error;
+            }
 
     };
 }
