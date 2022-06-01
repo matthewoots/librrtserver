@@ -52,7 +52,7 @@ namespace rrt_server
         std::cout << "transformed_start and transformed_end positions \n[" << transformed_start.transpose() <<
                  "] [" << transformed_end.transpose() << "]" << std::endl;
 
-        double _xybuffer = 0.0, _zbuffer = 3.0;
+        double _xybuffer = 1.0, _zbuffer = 5.0;
         double _passage_size = 10.0; // Additional buffer for the Y axis
         // Map size and origin should be determined and isolated 
         // In this method we can rotate the boundary so that we can minimize the space

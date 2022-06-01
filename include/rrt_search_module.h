@@ -83,8 +83,8 @@ namespace rrt_server
                 // To identify which one comes first the rotation or the translation
                 if (forward_or_back.compare("backward")==0)
                 {
-                    q = AngleAxisd(roll, Eigen::Vector3d::UnitX())
-                        * AngleAxisd(pitch, Eigen::Vector3d::UnitY())
+                    q = AngleAxisd(0.0, Eigen::Vector3d::UnitX())
+                        * AngleAxisd(-pitch, Eigen::Vector3d::UnitY())
                         * AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
                     point.vec() = Vector3d(p.x(), p.y(), p.z());
                     Eigen::Quaterniond rotatedP = q * point * q.inverse();
@@ -92,8 +92,8 @@ namespace rrt_server
                 }
                 else if (forward_or_back.compare("forward")==0)
                 {
-                    q = AngleAxisd(roll, Eigen::Vector3d::UnitX())
-                        * AngleAxisd(-pitch, Eigen::Vector3d::UnitY())
+                    q = AngleAxisd(0.0, Eigen::Vector3d::UnitX())
+                        * AngleAxisd(pitch, Eigen::Vector3d::UnitY())
                         * AngleAxisd(-yaw, Eigen::Vector3d::UnitZ());
                     point.vec() = Vector3d(p.x(), p.y(), p.z()) - translation;
                     Eigen::Quaterniond rotatedP = q * point * q.inverse();
@@ -309,7 +309,7 @@ namespace rrt_server
                 if (forward_or_back.compare("forward")==0)
                 {
                     q = AngleAxisd(- rotation_deg.x() / 180.0 * 3.1415, Vector3d::UnitX())
-                        * AngleAxisd(- rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
+                        * AngleAxisd( rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
                         * AngleAxisd(- rotation_deg.z() / 180.0 * 3.1415, Vector3d::UnitZ());
 
                     Eigen::Quaterniond p;
@@ -320,9 +320,9 @@ namespace rrt_server
                 }
                 else if (forward_or_back.compare("backward")==0)
                 {
-                    q = AngleAxisd(rotation_deg.x() / 180.0 * 3.1415, Vector3d::UnitX())
-                        * AngleAxisd(rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
-                        * AngleAxisd(rotation_deg.z() / 180.0 * 3.1415, Vector3d::UnitZ());
+                    q = AngleAxisd( rotation_deg.x() / 180.0 * 3.1415, Vector3d::UnitX())
+                        * AngleAxisd(- rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
+                        * AngleAxisd( rotation_deg.z() / 180.0 * 3.1415, Vector3d::UnitZ());
 
                     Eigen::Quaterniond p;
                     p.w() = 0;
