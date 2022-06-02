@@ -33,6 +33,7 @@
 #include <iostream>
 #include <string>
 #include <cmath>
+#include <math.h>
 #include <vector>
 #include <algorithm>
 #include <limits>
@@ -72,10 +73,9 @@ namespace rrt_server
 
             /** @brief Transform pose according to the translation and rpy given */
             inline Eigen::Vector3d transform_vector(
-                Eigen::Vector3d p, Eigen::Vector3d rpy, Vector3d translation, 
+                Eigen::Vector3d p, Eigen::Quaterniond rpy, Vector3d translation, 
                 std::string forward_or_back)
             {
-                double roll = deg_to_rad(rpy.x()), pitch = deg_to_rad(rpy.y()), yaw = deg_to_rad(rpy.z());    
                 Eigen::Quaterniond q;
 
                 Eigen::Quaterniond point;
@@ -83,18 +83,14 @@ namespace rrt_server
                 // To identify which one comes first the rotation or the translation
                 if (forward_or_back.compare("backward")==0)
                 {
-                    q = AngleAxisd(0.0, Eigen::Vector3d::UnitX())
-                        * AngleAxisd(-pitch, Eigen::Vector3d::UnitY())
-                        * AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
+                    q = rpy.inverse();
                     point.vec() = Vector3d(p.x(), p.y(), p.z());
                     Eigen::Quaterniond rotatedP = q * point * q.inverse();
                     return rotatedP.vec() + translation;
                 }
                 else if (forward_or_back.compare("forward")==0)
                 {
-                    q = AngleAxisd(0.0, Eigen::Vector3d::UnitX())
-                        * AngleAxisd(pitch, Eigen::Vector3d::UnitY())
-                        * AngleAxisd(-yaw, Eigen::Vector3d::UnitZ());
+                    q = rpy;
                     point.vec() = Vector3d(p.x(), p.y(), p.z()) - translation;
                     Eigen::Quaterniond rotatedP = q * point * q.inverse();
                     return rotatedP.vec();
@@ -243,7 +239,8 @@ namespace rrt_server
                 Eigen::Vector3d rot_vec = pq_vector / pq_vector.norm();
                 Eigen::Vector3d valid_origin = (p_end + q_start) / 2;
 
-                Eigen::Vector3d rotation_vector = deg_euler_rotation_pitch_yaw(rot_vec);
+                Eigen::Quaterniond rotation_vector = deg_quaternion_pitch_yaw(
+                    Vector3d(1,0,0), rot_vec);
 
                 /** @brief Get a local cloud and check whether there is any points */
                 Eigen::Vector3d local_map_size;
@@ -299,7 +296,7 @@ namespace rrt_server
             }
 
             inline Eigen::Affine3d get_point_cloud_transform(
-                Eigen::Vector3d rotation_deg, Eigen::Vector3d translation,
+                Eigen::Quaterniond rotation_deg, Eigen::Vector3d translation,
                 std::string forward_or_back)
             {
                 Eigen::Vector3d rotatedV;
@@ -308,10 +305,7 @@ namespace rrt_server
                 // To identify which one comes first the rotation or the translation
                 if (forward_or_back.compare("forward")==0)
                 {
-                    q = AngleAxisd(- rotation_deg.x() / 180.0 * 3.1415, Vector3d::UnitX())
-                        * AngleAxisd( rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
-                        * AngleAxisd(- rotation_deg.z() / 180.0 * 3.1415, Vector3d::UnitZ());
-
+                    q = rotation_deg;
                     Eigen::Quaterniond p;
                     p.w() = 0;
                     p.vec() = - translation;
@@ -320,10 +314,7 @@ namespace rrt_server
                 }
                 else if (forward_or_back.compare("backward")==0)
                 {
-                    q = AngleAxisd( rotation_deg.x() / 180.0 * 3.1415, Vector3d::UnitX())
-                        * AngleAxisd(- rotation_deg.y() / 180.0 * 3.1415, Vector3d::UnitY())
-                        * AngleAxisd( rotation_deg.z() / 180.0 * 3.1415, Vector3d::UnitZ());
-
+                    q = rotation_deg.inverse();
                     Eigen::Quaterniond p;
                     p.w() = 0;
                     p.vec() = Eigen::Vector3d::Zero();
@@ -342,8 +333,11 @@ namespace rrt_server
             inline Eigen::Vector3d deg_euler_rotation_pitch_yaw(Eigen::Vector3d rot_vector)
             {
                 double xy = sqrt(pow(rot_vector.x(),2) + pow(rot_vector.y(),2));
+
+                double yaw = atan(rot_vector.y() / rot_vector.x()); 
+
                 double pitch = atan2(rot_vector.z(), xy);
-                double yaw = atan2(rot_vector.y(), rot_vector.x());    
+
                 Eigen::Quaterniond q2 = AngleAxisd(0.0, Vector3d::UnitX())
                     * AngleAxisd(pitch, Vector3d::UnitY())
                     * AngleAxisd(0.0, Vector3d::UnitZ());
@@ -358,6 +352,29 @@ namespace rrt_server
                 rotation_vector = rotation_vector / 3.1415926535 * 180;
 
                 return rotation_vector;
+            }
+
+            inline Eigen::Quaterniond deg_quaternion_pitch_yaw(
+                Eigen::Vector3d v1, Eigen::Vector3d v2)
+            {
+                // https://stackoverflow.com/questions/1171849/finding-quaternion-representing-the-rotation-from-one-vector-to-another
+                // dot_product check
+                Eigen::Quaterniond q = Eigen::Quaterniond::Identity();
+                if (v1.x()*v2.x() + 
+                    v1.y()*v2.y() + v1.z()*v2.z() > 0.999999)
+                    return q;
+
+                if (v1.x()*v2.x() + 
+                    v1.y()*v2.y() + v1.z()*v2.z() < -0.999999)
+                    return q;
+
+                Eigen::Vector3d a = v2.cross(v1);
+                q.vec() = Vector3d(a.x(), a.y(), a.z());
+                q.w() = sqrt(pow(v1.norm(),2) * pow(v2.norm(),2)) + 
+                    v1.x()*v2.x() + v1.y()*v2.y() + v1.z()*v2.z();
+                q.normalize();
+
+                return q;
             }
 
     };
@@ -395,7 +412,8 @@ namespace rrt_server
 
         Eigen::Vector3d map_size, origin;
 
-        Eigen::Vector3d rotation, translation;
+        Eigen::Vector3d translation;
+        Eigen::Quaterniond rotation;
 
         std::random_device dev;
 
@@ -644,7 +662,7 @@ namespace rrt_server
 
         void initialize_node_characteristics(
             double _timeout, double _step_size, double _obs_threshold, 
-            Vector3d _rotation, Vector3d _translation)
+            Eigen::Quaterniond _rotation, Vector3d _translation)
         {
             initialized++;
 

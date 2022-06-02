@@ -39,8 +39,16 @@ namespace rrt_server
         Eigen::Vector3d vect = end - start;
         Eigen::Vector3d rot_vec = vect / vect.norm();
 
-        Eigen::Vector3d rotation = ru.deg_euler_rotation_pitch_yaw(rot_vec);
+        Eigen::Quaterniond rotation = ru.deg_quaternion_pitch_yaw(
+            Vector3d(1,0,0), rot_vec);
+        // Eigen::Vector3d rotation = ru.deg_quaternion_pitch_yaw(
+        //     Vector3d(1,0,0),rot_vec);
+        // Eigen::Vector3d rotation = ru.deg_euler_rotation_pitch_yaw(rot_vec);
         
+        /** @brief Print rotation */
+        // std::cout << "rotation [" << KBLU <<
+        //     rotation.transpose() << KNRM << "]" << std::endl;
+
         // We will align in the X axis
         Eigen::Vector3d transformed_start = ru.transform_vector(
             start, rotation, _origin, "forward");
@@ -49,8 +57,8 @@ namespace rrt_server
             end, rotation, _origin, "forward");
 
         /** @brief Print the transformed start and end points */
-        std::cout << "transformed_start and transformed_end positions \n[" << transformed_start.transpose() <<
-                 "] [" << transformed_end.transpose() << "]" << std::endl;
+        // std::cout << "transformed_start and transformed_end positions \n[" << transformed_start.transpose() <<
+        //     "] [" << transformed_end.transpose() << "]" << std::endl;
 
         double _xybuffer = 1.0, _zbuffer = 5.0;
         double _passage_size = 10.0; // Additional buffer for the Y axis
