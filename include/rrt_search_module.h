@@ -462,6 +462,9 @@ namespace rrt_server
                 if (original_position.x() <= x_max && original_position.x() >= x_min &&
                     original_position.y() <= y_max && original_position.y() >= y_min)
                 {
+                    // std::cout << "[rrt_search_module] " << 
+                    //     KRED << "Rejected in no fly zone" << KNRM << std::endl; 
+                    return;
                     return;
                 }                    
             }
@@ -472,7 +475,7 @@ namespace rrt_server
             if(!flag)
             {
                 // std::cout << "[rrt_search_module] " << 
-                //     KRED << "Rejected" << KNRM << std::endl; 
+                //     KRED << "Rejected not valid" << KNRM << std::endl; 
                 return;
             }
 
@@ -597,8 +600,11 @@ namespace rrt_server
         {
             std::vector<Vector3d> shortened_path;
             shortened_path.push_back(path[0]);
+            previous = diff
             for (int i = 1; i < path.size(); i++)
             {
+                std::cout << "path " << 
+                    KGRN << path[i].transpose() << KNRM << std::endl;
                 if (!ru.check_line_validity_with_pcl(
                     path[i], shortened_path[(int)shortened_path.size()-1], 
                     obs_threshold, obs))
@@ -622,10 +628,11 @@ namespace rrt_server
         ~rrt_search_node(){}
 
         // Initialization requires alot of data
+        // The order should be launched as shown below
         // 1. initialize_start_end
         // 2. initialize_boundaries
-        // 3. initialize_map_characteristics
-        // 4. initialize_node_characteristics
+        // 3. initialize_node_characteristics
+        // 4. initialize_map_characteristics
 
         void initialize_start_end(Eigen::Vector3d _start, Eigen::Vector3d _end)
         {
@@ -647,6 +654,8 @@ namespace rrt_server
             no_fly_zone = _no_fly_zone;
             _min_height = min_height;
             _max_height = max_height;
+
+            update_node_with_input();
         }
 
         void initialize_map_characteristics(
@@ -695,6 +704,27 @@ namespace rrt_server
                 return std::vector<Vector3d>();
 
             return path_extraction();
+        }
+
+        void update_node_with_input()
+        {
+            if (input.empty())
+                return;
+
+            for (int i = 0; i < input.size()-1; i++)
+            {
+                Node* step_node = new Node;
+                step_node->position = input[i];
+                // Add the new node into the list and 
+                // push_back data on children and parent
+                // int idx = nodes.size()-1;
+                step_node->parent = nodes[i];
+                nodes.push_back(step_node);  
+                nodes[i]->children.push_back(step_node);
+            }
+            std::cout << "Previous points size " << 
+                KGRN << input.size() << KNRM <<
+                " final node size " << nodes.size() << std::endl;
         }
 
     };
