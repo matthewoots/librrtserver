@@ -60,8 +60,8 @@ namespace rrt_server
         // std::cout << "transformed_start and transformed_end positions \n[" << transformed_start.transpose() <<
         //     "] [" << transformed_end.transpose() << "]" << std::endl;
 
-        double _xybuffer = 1.0, _zbuffer = 5.0;
-        double _passage_size = 16.0; // Additional buffer for the Y axis
+        double _xybuffer = 1.0, _zbuffer = 4.0;
+        double _passage_size = 12.0; // Additional buffer for the Y axis
         // Map size and origin should be determined and isolated 
         // In this method we can rotate the boundary so that we can minimize the space
         Eigen::Vector3d map_size = Eigen::Vector3d(
@@ -122,12 +122,22 @@ namespace rrt_server
                 KGRN << total_points_original << KNRM << 
                 " compared to debug_save_local_obs " <<
                 KGRN << total_points_crop  << KNRM << std::endl;
-        
+
+        // Transform the previous input
+        vector<Eigen::Vector3d> transformed_previous_input;
+        for (int j = 0; j < previous_input.size() ; j++)
+        {            
+            Eigen::Vector3d transformed_vector = ru.transform_vector(
+                previous_input[j], rotation, _origin, "forward");
+
+            transformed_previous_input.push_back(transformed_vector);
+        }
+
 
         std::vector<Eigen::Vector3d> transformed_extracted_path;
         time_point<std::chrono::system_clock> fail_timer_start = system_clock::now();
 
-        rrt_server::rrt_search_node rsn(previous_input);
+        rrt_server::rrt_search_node rsn(transformed_previous_input);
         rsn.initialize_start_end(transformed_start, transformed_end);
         rsn.initialize_boundaries(_min_height, _max_height, _no_fly_zone);
         rsn.initialize_node_characteristics(_sub_runtime_error, step_size, _protected_zone, 

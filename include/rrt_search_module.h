@@ -600,11 +600,8 @@ namespace rrt_server
         {
             std::vector<Vector3d> shortened_path;
             shortened_path.push_back(path[0]);
-            previous = diff
             for (int i = 1; i < path.size(); i++)
             {
-                std::cout << "path " << 
-                    KGRN << path[i].transpose() << KNRM << std::endl;
                 if (!ru.check_line_validity_with_pcl(
                     path[i], shortened_path[(int)shortened_path.size()-1], 
                     obs_threshold, obs))
@@ -719,8 +716,9 @@ namespace rrt_server
                 // push_back data on children and parent
                 // int idx = nodes.size()-1;
                 step_node->parent = nodes[i];
-                nodes.push_back(step_node);  
                 nodes[i]->children.push_back(step_node);
+
+                nodes.push_back(step_node); 
             }
             std::cout << "Previous points size " << 
                 KGRN << input.size() << KNRM <<
