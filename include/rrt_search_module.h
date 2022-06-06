@@ -617,20 +617,25 @@ namespace rrt_server
 
         public:
 
+        /** @brief Initialize constructor with previous input **/
         rrt_search_node(vector<Eigen::Vector3d> _input)
         {
             input = _input;
         }
     
+        /** @brief Destructor of rrt_search_node **/
         ~rrt_search_node(){}
 
-        // Initialization requires alot of data
-        // The order should be launched as shown below
-        // 1. initialize_start_end
-        // 2. initialize_boundaries
-        // 3. initialize_node_characteristics
-        // 4. initialize_map_characteristics
+        /** @brief Initialization stage 
+        * Initialization requires alot of data
+        * The order should be launched as shown below
+        * 1. initialize_start_end
+        * 2. initialize_boundaries
+        * 3. initialize_node_characteristics
+        * 4. initialize_map_characteristics
+        **/ 
 
+        /** @brief Initialization stage 1 **/
         void initialize_start_end(Eigen::Vector3d _start, Eigen::Vector3d _end)
         {
             initialized++;
@@ -642,6 +647,7 @@ namespace rrt_server
             end_node.position = _end;
         }
 
+        /** @brief Initialization stage 2 **/
         void initialize_boundaries(
             double min_height, double max_height, 
             vector<Eigen::Vector4d> _no_fly_zone)
@@ -655,17 +661,7 @@ namespace rrt_server
             update_node_with_input();
         }
 
-        void initialize_map_characteristics(
-            pcl::PointCloud<pcl::PointXYZ>::Ptr _pc, 
-            Vector3d _map_size, Vector3d _origin)
-        {
-            initialized++;
-
-            obs = _pc;
-            map_size = _map_size;
-            origin = _origin;
-        }
-
+        /** @brief Initialization stage 3 **/
         void initialize_node_characteristics(
             double _timeout, double _step_size, double _obs_threshold, 
             Eigen::Quaterniond _rotation, Vector3d _translation)
@@ -679,6 +675,19 @@ namespace rrt_server
             step_size = _step_size;
         }
 
+        /** @brief Initialization stage 4 **/
+        void initialize_map_characteristics(
+            pcl::PointCloud<pcl::PointXYZ>::Ptr _pc, 
+            Vector3d _map_size, Vector3d _origin)
+        {
+            initialized++;
+
+            obs = _pc;
+            map_size = _map_size;
+            origin = _origin;
+        }
+
+        /** @brief Main run function for the RRT module **/ 
         std::vector<Vector3d> run_rrt_module()
         {
             if (initialized != 4)
@@ -703,6 +712,7 @@ namespace rrt_server
             return path_extraction();
         }
 
+        /** @brief Update the search node with the previous input **/ 
         void update_node_with_input()
         {
             if (input.empty())
