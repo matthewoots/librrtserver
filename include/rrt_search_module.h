@@ -421,7 +421,7 @@ namespace rrt_server
         {
             std::mt19937 generator(dev());
             std::uniform_real_distribution<double> dis_middle(-1.0, 1.0);
-            std::uniform_real_distribution<double> dis_normal(_min_height, _max_height);
+            std::uniform_real_distribution<double> dis_normal(-map_size.z()/2, map_size.z()/2);
             
             Node* step_node = new Node;
 
@@ -479,6 +479,9 @@ namespace rrt_server
                 return;
             }
 
+            // std::cout << "[rrt_search_module] " << 
+            //     KBLU << step_node->position.transpose() << KNRM << std::endl;
+            
             // Add the new node into the list and push_back data on children and parent
             step_node->parent = nodes[index];
             nodes.push_back(step_node);

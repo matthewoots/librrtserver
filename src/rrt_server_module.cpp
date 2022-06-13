@@ -45,9 +45,13 @@ namespace rrt_server
         //     Vector3d(1,0,0),rot_vec);
         // Eigen::Vector3d rotation = ru.deg_euler_rotation_pitch_yaw(rot_vec);
         
+        /** @brief Print the start and end points */
+        // std::cout << "start and end positions \n[" << start.transpose() <<
+        //     "] [" << end.transpose() << "]" << std::endl;
+
         /** @brief Print rotation */
         // std::cout << "rotation [" << KBLU <<
-        //     rotation.transpose() << KNRM << "]" << std::endl;
+        //     rotation << KNRM << "]" << std::endl;
 
         // We will align in the X axis
         Eigen::Vector3d transformed_start = ru.transform_vector(
