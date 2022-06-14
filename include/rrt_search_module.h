@@ -436,7 +436,7 @@ namespace rrt_server
             Eigen::Vector3d random_vector = 
                 Eigen::Vector3d(dis_middle(generator) * (map_size.x()/2), 
                 dis_middle(generator) * (map_size.y()/2), 
-                dis_normal(generator) - translation.z());
+                dis_normal(generator));
             step_node->position = random_vector;
 
             int index = near_node(*step_node);
@@ -451,6 +451,13 @@ namespace rrt_server
             /** @brief Print the random point */
             // std::cout << "[rrt_search_module] " << 
             //     KBLU << random_vector.transpose() << KNRM << std::endl;
+            // Reject point if below or above minimum or maximum
+            if (original_position.z() <= _min_height && original_position.z() >= _max_height)
+            {
+                // std::cout << "[rrt_search_module] " << 
+                //     KRED << "Rejected in crossing height boundary" << KNRM << std::endl; 
+                return;
+            }
             
             for (int i = 0; i < (int)no_fly_zone.size(); i++)
             {
@@ -464,7 +471,6 @@ namespace rrt_server
                 {
                     // std::cout << "[rrt_search_module] " << 
                     //     KRED << "Rejected in no fly zone" << KNRM << std::endl; 
-                    return;
                     return;
                 }                    
             }
