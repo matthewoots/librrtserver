@@ -420,10 +420,32 @@ namespace rrt_server
         void search_single_node()
         {
             std::mt19937 generator(dev());
-            std::uniform_real_distribution<double> dis_middle(-1.0, 1.0);
-            std::uniform_real_distribution<double> dis_normal(-map_size.z()/2, map_size.z()/2);
             
+            std::uniform_real_distribution<double> dis_normal(-map_size.z()/2, map_size.z()/2);
+
+            double start_end_sq_sep = sq_separation(end_node.position, start_node.position);
+            double sq_range_dist = pow(step_size * 1.5, 2);
+            // double passage_factor = (- (map_size.y() / 2) + sqrt(sq_range_dist)) / (map_size.y() / 2);
+            std::uniform_real_distribution<double> dis_middle_offset(-1.0, 0.25);
+            std::uniform_real_distribution<double> dis_middle(-1.0, 1.0);
+
             Node* step_node = new Node;
+            Eigen::Vector3d random_vector;
+            // Check if end point is within sphere, if it is we proceed with connecting it to the end goal
+            if (start_end_sq_sep < sq_range_dist) 
+            {
+                random_vector = 
+                    Eigen::Vector3d(dis_middle(generator) * (map_size.x()/2), 
+                    dis_middle(generator) * (map_size.y()/2), 
+                    dis_normal(generator));
+            }
+            else
+            {
+                random_vector = 
+                    Eigen::Vector3d(dis_middle_offset(generator) * (map_size.x()/2), 
+                    dis_middle_offset(generator) * (map_size.y()/2), 
+                    dis_normal(generator));
+            }
 
             /** @brief Generate the random vector values */
             // No need no fly zone for random node since step node will handle it
@@ -433,10 +455,6 @@ namespace rrt_server
             // int index = random_idx_selector(nodes.size());
             // step_node->position = node_stepping(nodes[index]->position, random_vector);
 
-            Eigen::Vector3d random_vector = 
-                Eigen::Vector3d(dis_middle(generator) * (map_size.x()/2), 
-                dis_middle(generator) * (map_size.y()/2), 
-                dis_normal(generator));
             step_node->position = random_vector;
 
             int index = near_node(*step_node);
@@ -492,10 +510,19 @@ namespace rrt_server
             step_node->parent = nodes[index];
             nodes.push_back(step_node);
             nodes[index]->children.push_back(step_node);
-            
+
+            bool outside_area_of_influence = false;
+            // Check if end point is within sphere, if it is we proceed with connecting it to the end goal
+            if (start_end_sq_sep < sq_range_dist) 
+                outside_area_of_influence = true;
+            // Check if out of sphere
+            else if (sq_separation(step_node->position, start_node.position) > sq_range_dist)
+                outside_area_of_influence = true;
+
+
             if((ru.check_line_validity_with_pcl(
-                end_node.position, step_node->position, obs_threshold, obs)) && 
-                (sq_separation(step_node->position, end_node.position) < step_size))
+                end_node.position, step_node->position, obs_threshold, obs)) &&
+                outside_area_of_influence)
             {
                 reached = true;
                 end_node.parent = step_node;
@@ -677,6 +704,7 @@ namespace rrt_server
         {
             initialized++;
 
+            // Step_size is search radius
             timeout = _timeout;
             rotation = _rotation;
             translation = _translation;
